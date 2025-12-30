@@ -5087,7 +5087,25 @@ endfunction
 function! s:StageRemove(lnum1, lnum2) abort
   for info in s:Selection(a:lnum1, a:lnum2)
     if !empty(info.paths)
-      call s:TreeChomp('rm', '-f', '--', info.paths[0])
+      if info.status ==# '?'
+        " Untracked file or directory - ask for confirmation twice before deleting
+        let path = substitute(info.paths[0], '[\\/]*$', '', '')
+        let is_dir = isdirectory(info.paths[0])
+        let item_name = fnamemodify(path, ':t')
+        let item_type = is_dir ? 'directory' : 'file'
+        if confirm('Delete untracked ' . item_type . ' "' . item_name . '"?', "&Yes\n&No", 2) == 1
+          if confirm('Are you sure? This cannot be undone!', "&Yes\n&No", 2) == 1
+            if is_dir
+              call delete(info.paths[0], 'rf')
+            else
+              call delete(info.paths[0])
+            endif
+          endif
+        endif
+      else
+        " Tracked file - use git rm
+        call s:TreeChomp('rm', '-f', '--', info.paths[0])
+      endif
     endif
   endfor
   return s:ReloadStatus()
