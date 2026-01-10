@@ -2614,7 +2614,7 @@ function! s:AddSection(to, label, lines, ...) abort
   if empty(a:lines) && empty(note)
     return
   endif
-  call extend(a:to.lines, ['', a:label . (len(note) ? ': ' . note : ' (' . len(a:lines) . ')')] + s:Format(a:lines))
+  call extend(a:to.lines, (empty(a:to.lines) ? [] : ['']) + [a:label . (len(note) ? ': ' . note : ' (' . len(a:lines) . ')')] + s:Format(a:lines))
 endfunction
 
 function! s:AddDiffSection(to, stat, label, files) abort
@@ -2624,7 +2624,7 @@ function! s:AddDiffSection(to, stat, label, files) abort
   let diff_section = a:stat.diff[a:label]
   let expanded = a:stat.expanded[a:label]
   let was_expanded = get(getbufvar(a:stat.bufnr, 'fugitive_expanded', {}), a:label, {})
-  call extend(a:to.lines, ['', a:label . ' (' . len(a:files) . ')'])
+  call extend(a:to.lines, (empty(a:to.lines) ? [] : ['']) + [a:label . ' (' . len(a:files) . ')'])
   for file in a:files
     call add(a:to.lines, s:Format(file))
     if has_key(was_expanded, file.filename)
@@ -2661,7 +2661,7 @@ function! s:AddLogSection(to, label, log) abort
     return
   endif
   let label = a:label . ' (' . len(a:log.entries) . (a:log.overflow ? '+' : '') . ')'
-  call extend(a:to.lines, ['', label] + s:Format(a:log.entries))
+  call extend(a:to.lines, (empty(a:to.lines) ? [] : ['']) + [label] + s:Format(a:log.entries))
 endfunction
 
 let s:rebase_abbrevs = {
@@ -2971,21 +2971,7 @@ function! s:StatusRender(stat) abort
 
     let stat.expanded = {'Staged': {}, 'Unstaged': {}}
     let to = {'lines': []}
-    call s:AddHeader(to, 'Head', head)
-    call s:AddHeader(to, stat.pull_type, pull_short)
-    if push_ref !=# pull_ref
-      call s:AddHeader(to, 'Push', push_short)
-    endif
-    if empty(stat.work_tree)
-      if get(fugitive#ConfigGetAll('core.bare', config), 0, '') !~# '^\%(false\|no|off\|0\|\)$'
-        call s:AddHeader(to, 'Bare', 'yes')
-      else
-        call s:AddHeader(to, 'Error', s:worktree_error)
-      endif
-    endif
-    if get(fugitive#ConfigGetAll('advice.statusHints', config), 0, 'true') !~# '^\%(false\|no|off\|0\|\)$'
-      call s:AddHeader(to, 'Help', 'g?')
-    endif
+
 
     call s:AddSection(to, 'Rebasing ' . rebasing_head, rebasing)
     call s:AddSection(to, get(get(sequencing, 0, {}), 'status', '') ==# 'revert' ? 'Reverting' : 'Cherry Picking', sequencing)
@@ -3014,6 +3000,24 @@ function! s:StatusRender(stat) abort
     call s:AddLogSection(to, 'Unpulled from ' . push_short, s:QueryLogRange(head, unique_push_ref, dir))
     if len(pull_ref) && get(stat.props, 'branch.ab') !~# ' -0$'
       call s:AddLogSection(to, 'Unpulled from ' . pull_short, s:QueryLogRange(head, pull_ref, dir))
+    endif
+
+    call add(to.lines, '')
+
+    call s:AddHeader(to, 'Head', head)
+    call s:AddHeader(to, stat.pull_type, pull_short)
+    if push_ref !=# pull_ref
+      call s:AddHeader(to, 'Push', push_short)
+    endif
+    if empty(stat.work_tree)
+      if get(fugitive#ConfigGetAll('core.bare', config), 0, '') !~# '^\%(false\|no|off\|0\|\)$'
+        call s:AddHeader(to, 'Bare', 'yes')
+      else
+        call s:AddHeader(to, 'Error', s:worktree_error)
+      endif
+    endif
+    if get(fugitive#ConfigGetAll('advice.statusHints', config), 0, 'true') !~# '^\%(false\|no|off\|0\|\)$'
+      call s:AddHeader(to, 'Help', 'g?')
     endif
 
     let bufnr = stat.bufnr
