@@ -2726,6 +2726,11 @@ function! s:MapStatus() abort
   call s:Map('x', 'gI', ":<C-U>execute <SID>StageIgnore(line(\"'<\"), line(\"'>\"), v:count)<CR>", '<silent>')
   call s:Map('n', '.', ':<C-U> <C-R>=<SID>StageArgs(0)<CR><Home>')
   call s:Map('x', '.', ':<C-U> <C-R>=<SID>StageArgs(1)<CR><Home>')
+  call s:Map('n', 'cba', ':Git branch ', '')
+  call s:Map('n', 'cbn', ':Git checkout -b ', '')
+  call s:Map('n', 'czf', ":<C-U>execute <SID>stash_file(line('.'))<CR>", '<silent>')
+  call s:Map('n', 'czx', ":<C-U>execute <SID>stash_pop_file(line('.'))<CR>", '<silent>')
+  call s:Map('n', 'czd', ":<C-U>execute <SID>stash_drop_file(line('.'))<CR>", '<silent>')
 endfunction
 
 function! s:StatusProcess(result, stat) abort
@@ -3020,6 +3025,14 @@ function! s:StatusRender(stat) abort
       call s:AddHeader(to, 'Help', 'g?')
     endif
 
+    call fugitive#Wait(get(stat, 'branches_job', {}))
+    call s:AddSection(to, 'Branches', get(stat, 'branches', []))
+    call s:AddHeader(to, 'Branch Mappings', 'cba - create new branch, cbn - checkout as new branch')
+
+    call fugitive#Wait(get(stat, 'stash_job', {}))
+    call s:AddSection(to, 'Stash', get(stat, 'stash', []))
+    call s:AddHeader(to, 'Stash Mappings', 'czf - stash file, czx - pop/checkout, czd - drop stash')
+
     let bufnr = stat.bufnr
     setlocal noreadonly modifiable
     if len(to.lines) < line('$')
@@ -3033,6 +3046,45 @@ function! s:StatusRender(stat) abort
   finally
     let b:fugitive_type = 'index'
   endtry
+endfunction
+
+function! s:BranchesProcess(result, stat) abort
+  let a:stat.branches = filter(a:result.stdout, 'len(v:val)')
+endfunction
+
+function! s:stash_process(result, stat) abort
+  let a:stat.stash = filter(a:result.stdout, 'len(v:val)')
+endfunction
+
+function! s:stash_file(lnum) abort
+  let info = s:StageInfo(a:lnum)
+  if empty(info.paths)
+    return 'echo "No file under cursor"'
+  endif
+  let path = info.relative[0]
+  return 'Git stash push -m "Stash file: ' . path . '" -- ' . s:fnameescape(path)
+endfunction
+
+function! s:stash_pop_file(lnum) abort
+  let line = getline(a:lnum)
+  let stash = matchstr(line, '^stash@{\d\+}')
+  if !empty(stash)
+    return 'Git stash pop ' . stash
+  endif
+  let info = s:StageInfo(a:lnum)
+  if !empty(info.paths)
+    return 'Git checkout stash@{0} -- ' . s:fnameescape(info.relative[0])
+  endif
+  return 'echo "Not on a stash entry or file"'
+endfunction
+
+function! s:stash_drop_file(lnum) abort
+  let line = getline(a:lnum)
+  let stash = matchstr(line, '^stash@{\d\+}')
+  if !empty(stash)
+    return 'Git stash drop ' . stash
+  endif
+  return 'echo "Not on a stash entry"'
 endfunction
 
 function! s:StatusRetrieve(bufnr, ...) abort
@@ -3052,6 +3104,8 @@ function! s:StatusRetrieve(bufnr, ...) abort
   let rev_parse_cmd = cmd + ['rev-parse', '--short', 'HEAD', '--']
 
   let stat = {'bufnr': a:bufnr, 'reltime': reltime(), 'work_tree': s:Tree(dir), 'cmd': cmd, 'config': config}
+  let stat.branches_job = call('fugitive#Execute', [cmd + ['branch', '--list'], function('s:BranchesProcess'), stat] + a:000)
+  let stat.stash_job = call('fugitive#Execute', [cmd + ['stash', 'list'], function('s:stash_process'), stat] + a:000)
   if empty(stat.work_tree)
     let stat.rev_parse = call('fugitive#Execute', [rev_parse_cmd, function('s:StatusProcess'), stat] + a:000)
     let stat.status = {}
@@ -8167,6 +8221,8 @@ function! s:StatusCfile(...) abort
     return ['HEAD']
   elseif getline('.') =~# '^\%(. \)\=On branch '
     return ['refs/heads/'.getline('.')[12:]]
+  elseif getline('.') =~# '^[ *] \S'
+    return [matchstr(getline('.'), '^[ *] \zs\S\+')]
   elseif getline('.') =~# "^\\%(. \\)\=Your branch .*'"
     return [matchstr(getline('.'),"'\\zs\\S\\+\\ze'")]
   else
