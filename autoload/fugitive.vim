@@ -3049,8 +3049,16 @@ function! s:StatusRender(stat) abort
     call s:AddSection(to, 'Branches', get(stat, 'branches', []))
     call s:AddHeader(to, 'Branch Mappings', 'cba - create new branch, cbn - checkout as new branch')
 
+    let commits = s:LinesError([dir, 'log', '-5', '--pretty=format:Commit: %h - %s', 'HEAD'], dir)[0]
+    call s:AddSection(to, 'Commits', commits)
+
     call fugitive#Wait(get(stat, 'stash_job', {}))
-    call s:AddSection(to, 'Stash', get(stat, 'stash', []))
+    let stash = get(stat, 'stash', [])
+    if empty(stash)
+      call extend(to.lines, ['', 'Stash (0)'])
+    else
+      call s:AddSection(to, 'Stash', stash)
+    endif
     call s:AddHeader(to, 'Stash Mappings', 'czf - stash file, czx - pop/checkout, czd - drop stash')
 
     let bufnr = stat.bufnr
@@ -8126,7 +8134,7 @@ function! fugitive#MapJumps(...) abort
 
     else
       call s:Map('n', '<2-LeftMouse>', ':<C-U>exe <SID>GF("edit")<CR>', '<silent>')
-      call s:Map('n', '<CR>', ':<C-U>exe <SID>GF("edit")<CR>', '<silent>')
+      call s:Map('n', '<CR>', ':<C-U>call <SID>SmartEnter()<CR>', '<silent>')
       call s:Map('n', 'o',    ':<C-U>exe <SID>GF("split")<CR>', '<silent>')
       call s:Map('n', 'gO',   ':<C-U>exe <SID>GF("vsplit")<CR>', '<silent>')
       call s:Map('n', 'O',    ':<C-U>exe <SID>GF("tabedit")<CR>', '<silent>')
@@ -8548,6 +8556,22 @@ endfunction
 
 function! fugitive#foldtext() abort
   return fugitive#Foldtext()
+endfunction
+
+function! s:SmartEnter() abort
+  let line = getline('.')
+  if line =~# '^Commit: '
+    let commit = matchstr(line, '^Commit: \zs\S\+')
+    if empty(commit)
+      return ''
+    endif
+    if confirm('Checkout ' . commit . '?', "&Yes\n&No") == 1
+      exe 'Git checkout ' . commit
+      call s:ReloadStatus()
+    endif
+    return ''
+  endif
+  exe s:GF('edit')
 endfunction
 
 " Section: End
