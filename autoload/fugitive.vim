@@ -2747,10 +2747,20 @@ function! s:MapStatus() abort
   call s:Map('n', '.', ':<C-U> <C-R>=<SID>StageArgs(0)<CR><Home>')
   call s:Map('x', '.', ':<C-U> <C-R>=<SID>StageArgs(1)<CR><Home>')
   call s:Map('n', 'cba', ':Git branch ', '')
-  call s:Map('n', 'cbn', ':Git checkout -b ', '')
+  call s:Map('n', 'cbn', ':Git switch -c ', '')
+  call s:Map('n', 'cbm', ":<C-U>execute <SID>merge_branch(line('.'))<CR>", '<silent>')
   call s:Map('n', 'czf', ":<C-U>execute <SID>stash_file(line('.'))<CR>", '<silent>')
   call s:Map('n', 'czx', ":<C-U>execute <SID>stash_pop_file(line('.'))<CR>", '<silent>')
   call s:Map('n', 'czd', ":<C-U>execute <SID>stash_drop_file(line('.'))<CR>", '<silent>')
+endfunction
+
+function! s:merge_branch(lnum) abort
+  let line = getline(a:lnum)
+  let branch = matchstr(line, '^[ *] \zs\S\+')
+  if !empty(branch)
+    return 'Git merge ' . branch
+  endif
+  return 'echo "Not on a branch"'
 endfunction
 
 function! s:StatusProcess(result, stat) abort
@@ -3047,7 +3057,7 @@ function! s:StatusRender(stat) abort
 
     call fugitive#Wait(get(stat, 'branches_job', {}))
     call s:AddSection(to, 'Branches', get(stat, 'branches', []))
-    call s:AddHeader(to, 'Branch Mappings', 'cba - create new branch, cbn - checkout as new branch')
+    call s:AddHeader(to, 'Branch Mappings', 'cba - create new branch, cbn - checkout as new branch, cbm - merge branch')
 
     let commits = s:LinesError([dir, 'log', '-5', '--pretty=format:Commit: %h - %s', 'HEAD'], dir)[0]
     call s:AddSection(to, 'Commits', commits)
@@ -8134,7 +8144,7 @@ function! fugitive#MapJumps(...) abort
 
     else
       call s:Map('n', '<2-LeftMouse>', ':<C-U>exe <SID>GF("edit")<CR>', '<silent>')
-      call s:Map('n', '<CR>', ':<C-U>call <SID>SmartEnter()<CR>', '<silent>')
+      call s:Map('n', '<CR>', ':<C-U>call <SID>smart_enter()<CR>', '<silent>')
       call s:Map('n', 'o',    ':<C-U>exe <SID>GF("split")<CR>', '<silent>')
       call s:Map('n', 'gO',   ':<C-U>exe <SID>GF("vsplit")<CR>', '<silent>')
       call s:Map('n', 'O',    ':<C-U>exe <SID>GF("tabedit")<CR>', '<silent>')
@@ -8558,7 +8568,7 @@ function! fugitive#foldtext() abort
   return fugitive#Foldtext()
 endfunction
 
-function! s:SmartEnter() abort
+function! s:smart_enter() abort
   let line = getline('.')
   if line =~# '^Commit: '
     let commit = matchstr(line, '^Commit: \zs\S\+')
