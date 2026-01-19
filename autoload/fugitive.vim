@@ -2678,8 +2678,28 @@ let s:rebase_abbrevs = {
       \ 'b': 'break',
       \ }
 
+function! s:StatusEnter() abort
+  let lnum = line('.')
+  while lnum > 0
+    let line = getline(lnum)
+    if line =~# '^[A-Z]'
+      if line =~# '^Branches'
+        let branch = matchstr(getline('.'), '^[ *] \zs\S\+')
+        if !empty(branch)
+          return 'Git checkout ' . branch
+        endif
+      endif
+      break
+    endif
+    let lnum -= 1
+  endwhile
+  return s:GF("edit")
+endfunction
+
 function! s:MapStatus() abort
   call fugitive#MapJumps()
+  call s:Map('n', '<CR>', ':<C-U>exe <SID>StatusEnter()<CR>', '<silent>')
+
   call s:Map('n', '-', ":<C-U>execute <SID>Do('Toggle',0)<CR>", '<silent>')
   call s:Map('x', '-', ":<C-U>execute <SID>Do('Toggle',1)<CR>", '<silent>')
   call s:Map('n', 's', ":<C-U>execute <SID>Do('Stage',0)<CR>", '<silent>')
