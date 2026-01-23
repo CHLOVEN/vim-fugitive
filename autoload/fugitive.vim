@@ -3145,7 +3145,10 @@ function! s:stash_drop_file(lnum) abort
   let line = getline(a:lnum)
   let stash = matchstr(line, '^stash@{\d\+}')
   if !empty(stash)
-    return 'if confirm("Drop ' . stash . '?", "&Yes\n&No") == 1 | Git stash drop ' . stash . ' | endif'
+    if confirm('Drop ' . stash . '?', "&Yes\n&No", 2) == 1
+      return 'Git stash drop ' . stash
+    endif
+    return 'echo ""'
   endif
   return 'echo "Not on a stash entry"'
 endfunction
