@@ -3051,9 +3051,6 @@ function! s:StatusRender(stat) abort
         call s:AddHeader(to, 'Error', s:worktree_error)
       endif
     endif
-    if get(fugitive#ConfigGetAll('advice.statusHints', config), 0, 'true') !~# '^\%(false\|no|off\|0\|\)$'
-      call s:AddHeader(to, 'Help', 'g?')
-    endif
 
     call fugitive#Wait(get(stat, 'branches_job', {}))
     call s:AddSection(to, 'Branches', get(stat, 'branches', []))
@@ -3071,6 +3068,10 @@ function! s:StatusRender(stat) abort
     endif
     call s:AddHeader(to, 'Stash Mappings', 'czf - stash file, czx - pop/checkout, czd - drop stash')
 
+    if get(fugitive#ConfigGetAll('advice.statusHints', config), 0, 'true') !~# '^\%(false\|no|off\|0\|\)$'
+      call s:AddHeader(to, 'Help', 'g?')
+    endif
+
     let bufnr = stat.bufnr
     setlocal noreadonly modifiable
     if len(to.lines) < line('$')
@@ -3087,7 +3088,30 @@ function! s:StatusRender(stat) abort
 endfunction
 
 function! s:BranchesProcess(result, stat) abort
-  let a:stat.branches = filter(a:result.stdout, 'len(v:val)')
+  let branches = filter(a:result.stdout, 'len(v:val)')
+  let head = FugitiveHead(0, a:stat.config)
+  if head !=# 'master' && !empty(head)
+    let master_idx = match(branches, '^\s*master$')
+    if master_idx != -1
+      let [out, err] = s:LinesError(a:stat.cmd + ['rev-list', '--left-right', '--count', 'master...HEAD'], s:Dir(a:stat.config))
+      if !err && len(out) && out[0] =~# '^\d\+\t\d\+$'
+        let counts = split(out[0], '\t')
+        let ahead = str2nr(counts[1])
+        let behind = str2nr(counts[0])
+        let status = ''
+        if ahead > 0
+          let status .= '+' . ahead
+        endif
+        if behind > 0
+          let status .= (empty(status) ? '' : ' ') . '-' . behind
+        endif
+        if !empty(status)
+          let branches[master_idx] .= ' (' . status . ')'
+        endif
+      endif
+    endif
+  endif
+  let a:stat.branches = branches
 endfunction
 
 function! s:stash_process(result, stat) abort
