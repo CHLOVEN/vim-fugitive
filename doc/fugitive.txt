@@ -527,10 +527,14 @@ Stash maps ~
 czz                     Push stash.  Pass a [count] of 1 to add
                         `--include-untracked` or 2 to add `--all`.
 
+czS                     Push stash including untracked files.
+
 czw                     Push stash of the work-tree.  Like `czz` with
                         `--keep-index`.
 
 czs                     Push stash of the stage.  Does not accept a count.
+
+czf                     Stash the file under the cursor.
 
 czA                     Apply topmost stash, or stash@{count}.
 
@@ -541,6 +545,12 @@ czP                     Pop topmost stash, or stash@{count}.
 
 czp                     Pop topmost stash, or stash@{count}, preserving the
                         index.
+
+czx                     Pop the stash entry under the cursor, or checkout
+                        the file under the cursor from the last stash.
+
+czd                     Drop the stash entry under the cursor.  Prompts
+                        for confirmation.
 
 cz<Space>               Populate command line with ":Git stash ".
 
