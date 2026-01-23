@@ -2749,6 +2749,9 @@ function! s:MapStatus() abort
   call s:Map('n', 'cba', ':Git branch ', '')
   call s:Map('n', 'cbn', ':Git switch -c ', '')
   call s:Map('n', 'cbm', ":<C-U>execute <SID>merge_branch(line('.'))<CR>", '<silent>')
+  call s:Map('n', 'cbd', ":<C-U>execute <SID>branch_delete_cmd(line('.'))<CR>", '<silent>')
+  call s:Map('n', 'cbw', ':<C-U>Git worktree add <C-R>=<SID>worktree_args(line("."))<CR>', '')
+  call s:Map('n', 'cbx', ":<C-U>execute <SID>worktree_remove_cmd(line('.'))<CR>", '<silent>')
   call s:Map('n', 'czf', ":<C-U>execute <SID>stash_file(line('.'))<CR>", '<silent>')
   call s:Map('n', 'czx', ":<C-U>execute <SID>stash_pop_file(line('.'))<CR>", '<silent>')
   call s:Map('n', 'czd', ":<C-U>execute <SID>stash_drop_file(line('.'))<CR>", '<silent>')
@@ -2762,6 +2765,62 @@ function! s:merge_branch(lnum) abort
     return 'Git merge ' . branch
   endif
   return 'echo "Not on a branch"'
+endfunction
+
+function! s:worktree_args(lnum) abort
+  let line = getline(a:lnum)
+  let branch = matchstr(line, '^[ *] \zs\S\+')
+  let name = input('Worktree name: ', branch)
+  if empty(name)
+    return ""
+  endif
+  call s:EnsureWorktreeIgnored()
+  return '-b ' . s:fnameescape(name) . ' ./.worktree/' . s:fnameescape(name)
+endfunction
+
+function! s:EnsureWorktreeIgnored() abort
+  let tree = s:Tree()
+  if empty(tree) | return | endif
+  let gitignore = tree . '/.gitignore'
+  if filereadable(gitignore)
+    let lines = readfile(gitignore)
+    if index(lines, '.worktree') == -1 && index(lines, '.worktree/') == -1
+      call writefile(lines + ['.worktree'], gitignore)
+    endif
+  endif
+endfunction
+
+function! s:worktree_remove_cmd(lnum) abort
+  let line = getline(a:lnum)
+  let branch = matchstr(line, '^[ *] \zs\S\+')
+  let name = input('Remove worktree/branch: ', branch)
+  if empty(name)
+    return "echo 'Cancelled'"
+  endif
+  let wt_path = './.worktree/' . name
+  if !isdirectory(s:Tree() . '/' . wt_path)
+    let wt_path = input('Worktree path not found in ./.worktree/. Enter path: ', wt_path, 'dir')
+    if empty(wt_path)
+      return "echo 'Cancelled'"
+    endif
+  endif
+  if confirm('CAUTION: Permanently remove worktree at "' . wt_path . '" and branch "' . name . '"?', "&Yes\n&No", 2) != 1
+    return "echo 'Cancelled'"
+  endif
+  return 'Git worktree remove ' . s:fnameescape(wt_path) . ' | Git branch -d ' . s:fnameescape(name)
+endfunction
+
+function! s:branch_delete_cmd(lnum) abort
+  let line = getline(a:lnum)
+  let branch = matchstr(line, '^[ *] \zs\S\+')
+  let name = input('Delete branch: ', branch)
+  if empty(name)
+    return "echo 'Cancelled'"
+  endif
+  if confirm('Delete branch "' . name . '"?', "&Yes\n&No", 2) != 1
+    return "echo 'Cancelled'"
+  endif
+  return 'Git branch -d ' . s:fnameescape(name)
 endfunction
 
 function! s:StatusProcess(result, stat) abort
@@ -3055,7 +3114,7 @@ function! s:StatusRender(stat) abort
 
     call fugitive#Wait(get(stat, 'branches_job', {}))
     call s:AddSection(to, 'Branches', get(stat, 'branches', []))
-    call s:AddHeader(to, 'Branch Mappings', 'cba - create new branch, cbn - checkout as new branch, cbm - merge branch')
+    call s:AddHeader(to, 'Branch Mappings', 'cba - create new branch, cbn - checkout as new branch, cbd - delete branch, cbm - merge branch, cbw - add wt, cbx - remove wt/branch')
 
     let commits = s:LinesError([dir, 'log', '-5', '--pretty=format:Commit: %h - %s', 'HEAD'], dir)[0]
     call s:AddSection(to, 'Commits', commits)
