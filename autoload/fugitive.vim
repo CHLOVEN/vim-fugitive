@@ -2752,6 +2752,7 @@ function! s:MapStatus() abort
   call s:Map('n', 'czf', ":<C-U>execute <SID>stash_file(line('.'))<CR>", '<silent>')
   call s:Map('n', 'czx', ":<C-U>execute <SID>stash_pop_file(line('.'))<CR>", '<silent>')
   call s:Map('n', 'czd', ":<C-U>execute <SID>stash_drop_file(line('.'))<CR>", '<silent>')
+  call s:Map('n', 'czS', ":Git stash push --include-untracked<CR>", '<silent>')
 endfunction
 
 function! s:merge_branch(lnum) abort
@@ -3066,7 +3067,7 @@ function! s:StatusRender(stat) abort
     else
       call s:AddSection(to, 'Stash', stash)
     endif
-    call s:AddHeader(to, 'Stash Mappings', 'czf - stash file, czx - pop/checkout, czd - drop stash')
+    call s:AddHeader(to, 'Stash Mappings', 'czf - stash file, czS - stash all, czx - pop/checkout, czd - drop stash')
 
     if get(fugitive#ConfigGetAll('advice.statusHints', config), 0, 'true') !~# '^\%(false\|no|off\|0\|\)$'
       call s:AddHeader(to, 'Help', 'g?')
