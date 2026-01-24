@@ -2678,7 +2678,22 @@ let s:rebase_abbrevs = {
       \ 'b': 'break',
       \ }
 
+function! s:IsWorktreeSection(lnum) abort
+  let lnum = a:lnum
+  while lnum > 0
+    let line = getline(lnum)
+    if line =~# '^[A-Z]'
+      return line =~# '\[worktree\]'
+    endif
+    let lnum -= 1
+  endwhile
+  return 0
+endfunction
+
 function! s:StatusEnter() abort
+  if s:IsWorktreeSection(line('.'))
+    return s:GF("edit")
+  endif
   let lnum = line('.')
   while lnum > 0
     let line = getline(lnum)
@@ -3113,8 +3128,10 @@ function! s:StatusRender(stat) abort
     endif
 
     call fugitive#Wait(get(stat, 'branches_job', {}))
+    call s:AddSection(to, 'Branches[worktree]', get(stat, 'worktrees', []))
+    call s:AddHeader(to, 'Worktree Mappings', 'cbw - add wt, cbx - remove wt/branch')
     call s:AddSection(to, 'Branches', get(stat, 'branches', []))
-    call s:AddHeader(to, 'Branch Mappings', 'cba - create new branch, cbn - checkout as new branch, cbd - delete branch, cbm - merge branch, cbw - add wt, cbx - remove wt/branch')
+    call s:AddHeader(to, 'Branch Mappings', 'cba - create new branch, cbn - checkout as new branch, cbd - delete branch, cbm - merge branch')
 
     let commits = s:LinesError([dir, 'log', '-5', '--pretty=format:Commit: %h - %s', 'HEAD'], dir)[0]
     call s:AddSection(to, 'Commits', commits)
@@ -3147,31 +3164,56 @@ function! s:StatusRender(stat) abort
   endtry
 endfunction
 
+function! s:BranchStatus(branch_name, stat) abort
+  let [out, err] = s:LinesError(a:stat.cmd + ['rev-list', '--left-right', '--count', a:branch_name . '...HEAD'], s:Dir(a:stat.config))
+  if !err && len(out) && out[0] =~# '^\d\+\t\d\+$'
+    let counts = split(out[0], '\t')
+    let behind = str2nr(counts[0])
+    let ahead = str2nr(counts[1])
+    let status = ''
+    if ahead > 0
+      let status .= '+' . ahead
+    endif
+    if behind > 0
+      let status .= (empty(status) ? '' : ' ') . '-' . behind
+    endif
+    if !empty(status)
+      return ' (' . status . ')'
+    endif
+  endif
+  return ''
+endfunction
+
 function! s:BranchesProcess(result, stat) abort
-  let branches = filter(a:result.stdout, 'len(v:val)')
+  let lines = filter(a:result.stdout, 'len(v:val)')
+  let branches = []
+  let worktrees = []
   let head = FugitiveHead(0, a:stat.config)
+  for line in lines
+    let is_worktree = line =~# '^+'
+    let branch_name = substitute(line, '^[+* ] ', '', '')
+    let status = ''
+    if is_worktree
+      let status = s:BranchStatus(branch_name, a:stat)
+      call add(worktrees, '  ' . branch_name . status)
+    else
+      call add(branches, line)
+    endif
+  endfor
+
   if head !=# 'master' && !empty(head)
     let master_idx = match(branches, '^\s*master$')
     if master_idx != -1
-      let [out, err] = s:LinesError(a:stat.cmd + ['rev-list', '--left-right', '--count', 'master...HEAD'], s:Dir(a:stat.config))
-      if !err && len(out) && out[0] =~# '^\d\+\t\d\+$'
-        let counts = split(out[0], '\t')
-        let ahead = str2nr(counts[1])
-        let behind = str2nr(counts[0])
-        let status = ''
-        if ahead > 0
-          let status .= '+' . ahead
-        endif
-        if behind > 0
-          let status .= (empty(status) ? '' : ' ') . '-' . behind
-        endif
-        if !empty(status)
-          let branches[master_idx] .= ' (' . status . ')'
-        endif
-      endif
+      let branches[master_idx] .= s:BranchStatus('master', a:stat)
+    endif
+    let master_wt_idx = match(worktrees, '^\s*master\%( (.*\)\?$')
+    if master_wt_idx != -1
+      " Master in worktrees already has stats from the loop above,
+      " but s:BranchStatus added full ahead/behind, which is what we want.
     endif
   endif
   let a:stat.branches = branches
+  let a:stat.worktrees = worktrees
 endfunction
 
 function! s:stash_process(result, stat) abort
